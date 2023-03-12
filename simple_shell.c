@@ -28,11 +28,12 @@ void clearExecutionCommandArray();
 void loggingHandler();
 void backgroundExecutionParsingHandler();
 void setupEnvironment();
-
+void exitSetup();
+void exitSignalHandler(int sig);
 
 
 int main(){
-
+    exitSetup();
     signal(SIGCHLD , loggingHandler);
     setupEnvironment();
     simpleShell();
@@ -47,7 +48,10 @@ void simpleShell(){
 
         getCommand();
         parseCommandToExecute();
-        if(!strcmp(execution_command[0] , "exit")) exit(EXIT_FAILURE);
+        if(!strcmp(execution_command[0] , "exit")) {
+            kill(0, SIGTERM);
+            break;
+        }
         if(!strcmp(execution_command[0] , "")) continue;
         createChildProcessToExecuteCommand();
     }
@@ -100,7 +104,6 @@ void createChildProcessToExecuteCommand() {
     pid_t child = fork();
 
     if (child == 0) {
-        if(!strcmp(execution_command[0] , "exit")) exit(EXIT_FAILURE);
         commandsHandlers();
     }
 
@@ -179,4 +182,22 @@ void backgroundExecutionParsingHandler(){
 
 void setupEnvironment(){
  getcwd(SETUP_PATH , sizeof(SETUP_PATH));
+}
+
+void exitSetup(){
+    struct sigaction exit_signal;
+    exit_signal.sa_handler = exitSignalHandler;
+    sigemptyset(&exit_signal.sa_mask);
+    exit_signal.sa_flags = 0;
+    if (sigaction(SIGTERM, &exit_signal, NULL) == -1) {
+        perror("sigaction");
+        exit(1);
+    }
+}
+
+void exitSignalHandler(int sig)
+{
+    if (sig == SIGTERM) {
+        exit(EXIT_SUCCESS);
+    }
 }
