@@ -164,6 +164,7 @@ void clearExecutionCommandArray(){
 }
 
 void loggingHandler(){
+    //zombie handling
     FILE *file;
     file = fopen("log.txt","a");
     if(file == NULL)perror("Error create file");
