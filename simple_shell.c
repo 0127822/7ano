@@ -15,7 +15,7 @@
 char command[MAX_COMMAND_LENGTH];
 char *execution_command[MAX_ARG_LENGTH];
 char NUM_OF_ARG;
-char count =0;
+char SETUP_PATH[1024];
 
 
 void getCommand();
@@ -24,12 +24,19 @@ void createChildProcessToExecuteCommand();
 void simpleShell();
 void changeDirectoryExecution();
 void commandsHandlers();
-void clearExecutionArray();
+void clearExecutionCommandArray();
+void loggingHandler();
+void backgroundExecutionParsingHandler();
+void setupEnvironment();
 
 
 
 int main(){
+
+    signal(SIGCHLD , loggingHandler);
+    setupEnvironment();
     simpleShell();
+
     return 0;
 
 }
@@ -40,10 +47,9 @@ void simpleShell(){
 
         getCommand();
         parseCommandToExecute();
-        if(!strcmp(execution_command[0] , "exit")) exit(EXIT_SUCCESS);
+        if(!strcmp(execution_command[0] , "exit")) exit(EXIT_FAILURE);
         if(!strcmp(execution_command[0] , "")) continue;
         createChildProcessToExecuteCommand();
-
     }
 
 }
@@ -68,22 +74,33 @@ void parseCommandToExecute(){
     while (parsed != NULL){
 
         int len = strlen(parsed);
+
         while (len > 0 && isspace(parsed[len-1])) {
             parsed[--len] = '\0';
         }
-
-        execution_command[NUM_OF_ARG] = parsed;
+        //parse for get the exported variables
+        if (parsed[0] == '$') {
+            char* value = getenv(parsed + 1);
+            if (value != NULL) {
+                execution_command[NUM_OF_ARG] = value;
+            } else {
+                execution_command[NUM_OF_ARG] = parsed;
+            }
+        }else {
+            execution_command[NUM_OF_ARG] = parsed;
+        }
         NUM_OF_ARG++;
         parsed = strtok(NULL  ,  delimiter);
     }
-
-
+    backgroundExecutionParsingHandler();
 }
 
 void createChildProcessToExecuteCommand() {
+
     pid_t child = fork();
 
     if (child == 0) {
+        if(!strcmp(execution_command[0] , "exit")) exit(EXIT_FAILURE);
         commandsHandlers();
     }
 
@@ -92,17 +109,16 @@ void createChildProcessToExecuteCommand() {
     }
 
     else{
-        if(execution_command[NUM_OF_ARG] == NULL)waitpid(child , NULL , 0);
+        if(execution_command[NUM_OF_ARG] == NULL) waitpid(child , NULL , 0);
     }
 
-    clearExecutionArray();
+    clearExecutionCommandArray();
 
 }
 
 void changeDirectoryExecution() {
         if (NUM_OF_ARG <2) {
-            fprintf(stderr, "cd: missing argument\n");
-            return;
+            chdir(SETUP_PATH);
         } else if(!strcmp(execution_command[1], "~")){
             chdir("/home");
         } else if (chdir( execution_command[1]) != 0){
@@ -112,9 +128,7 @@ void changeDirectoryExecution() {
 
 void commandsHandlers(){
 
-    if(!strcmp(execution_command[0] , "exit")) exit(EXIT_SUCCESS);
-
-    else if (!strcmp(execution_command[0], "cd")) {
+    if (!strcmp(execution_command[0], "cd")) {
         changeDirectoryExecution();
     }
     else if (!strcmp(execution_command[0], "export")) {
@@ -135,13 +149,34 @@ void commandsHandlers(){
     }
     else {
         execvp(execution_command[0], execution_command);
-        perror("execvp");
+        printf("%s: command not found\n" , execution_command[0]);
         exit(EXIT_FAILURE);
     }
 }
 
-void clearExecutionArray(){
+void clearExecutionCommandArray(){
     for (int cmd = 0 ; cmd <NUM_OF_ARG ; cmd++ ){
         execution_command[cmd] = NULL ;
     }
+}
+
+void loggingHandler(){
+    FILE *file;
+    file = fopen("log.txt","a");
+    if(file == NULL)perror("Error create file");
+    else fprintf(file , "[LOGS]: child proccess terminated. \n");
+    fclose(file);
+}
+
+void backgroundExecutionParsingHandler(){
+    if(!strcmp(execution_command[NUM_OF_ARG-1], "&")){
+        execution_command[NUM_OF_ARG-1] = NULL;
+        execution_command[NUM_OF_ARG]= "&";
+    } else{
+        execution_command[NUM_OF_ARG]= NULL;
+    }
+}
+
+void setupEnvironment(){
+ getcwd(SETUP_PATH , sizeof(SETUP_PATH));
 }
